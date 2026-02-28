@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Lucky Roulette - Final Space</title>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --space-void: #3E1340;
+            --neon-magenta: #FF00FE;
+            --deep-pink: #EE018F;
+            --bright-cyan: #41FEFF;
+            --pale-cyan: #BFFFFC;
+        }
+
+        * { box-sizing: border-box; }
+
+        body, html {
+            margin: 0; padding: 0;
+            width: 100%; height: 100%;
+            background-color: var(--space-void);
+            background-image: radial-gradient(circle at center, #250b26 0%, #000 100%);
+            color: white;
+            font-family: 'Orbitron', sans-serif;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center; /* Todo agrupado al centro */
+            gap: 10px;
+        }
+
+        h1 {
+            font-size: clamp(1.4rem, 6vw, 2.2rem);
+            margin: 0 0 10px 0;
+            color: var(--pale-cyan);
+            text-shadow: 0 0 10px var(--bright-cyan), 0 0 20px var(--neon-magenta);
+            letter-spacing: 2px;
+            text-align: center;
+        }
+
+        /* Escena Ruleta */
+        .scene {
+            position: relative;
+            width: 100%;
+            max-height: 60vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            perspective: 1000px;
+            padding-top: 20px; /* Espacio para el puntero */
+        }
+
+        .wheel-container {
+            position: relative;
+            width: 80vw;
+            max-width: 360px;
+            aspect-ratio: 1/1;
+            transform: rotateX(30deg);
+            transform-style: preserve-3d;
+        }
+
+        .ship-frame {
+            position: absolute;
+            top: -12px; left: -12px; right: -12px; bottom: -12px;
+            border-radius: 50%;
+            border: 3px solid var(--pale-cyan);
+            box-shadow: 0 0 20px var(--bright-cyan), inset 0 0 30px var(--neon-magenta);
+            background: rgba(0,0,0,0.5);
+        }
+
+        #wheel {
+            width: 100%;
+            height: 100%;
+            border-radius: 50%;
+            transition: transform 5s cubic-bezier(0.15, 0, 0.05, 1);
+        }
+
+        /* PUNTERO: Ajustado para estar pegado a la ruleta */
+        .pointer {
+            position: absolute;
+            top: 5px; /* Bajado para estar casi encima del borde */
+            left: 50%;
+            transform: translateX(-50%) translateZ(40px);
+            width: 30px;
+            height: 40px;
+            background: var(--pale-cyan);
+            clip-path: polygon(50% 100%, 0% 0%, 100% 0%);
+            z-index: 100;
+            filter: drop-shadow(0 0 8px var(--bright-cyan));
+        }
+
+        /* CAJA RESULTADO: Pegada a la escena */
+        .result-box {
+            margin-top: -10px; /* Margen negativo para compensar la inclinación visual */
+            padding: 12px 25px;
+            border: 2px solid var(--bright-cyan);
+            background: rgba(0, 0, 0, 0.8);
+            border-radius: 8px;
+            min-width: 160px;
+            text-align: center;
+            box-shadow: 0 0 15px var(--bright-cyan);
+            opacity: 0;
+            transition: 0.4s;
+            z-index: 10;
+        }
+
+        .result-box.show {
+            opacity: 1;
+            transform: scale(1.1);
+        }
+
+        #result-text {
+            font-size: 1.4rem;
+            color: var(--neon-magenta);
+            text-shadow: 0 0 8px var(--neon-magenta);
+            margin: 0;
+            text-transform: uppercase;
+        }
+
+    </style>
+</head>
+<body onclick="handleSpin(event)">
+
+    <h1>LUCKY ROULETTE</h1>
+
+    <div class="scene">
+        <div class="pointer"></div>
+        <div class="wheel-container">
+            <div class="ship-frame"></div>
+            <svg id="wheel" viewBox="0 0 500 500">
+                <g id="sectionsGroup"></g>
+                <circle cx="250" cy="250" r="25" fill="#000" stroke="var(--pale-cyan)" stroke-width="3" />
+                <circle cx="250" cy="250" r="6" fill="var(--bright-cyan)" />
+            </svg>
+        </div>
+    </div>
+
+    <div class="result-box" id="result-box">
+        <p id="result-text"></p>
+    </div>
+
+    <script>
+        const options = [
+            { label: "KISS", color: "#FF00FE", text: "white" },
+            { label: "SLAP", color: "#3E1340", text: "#41FEFF" },
+            { label: "DRINK", color: "#EE018F", text: "white" },
+            { label: "SHOT", color: "#41FEFF", text: "#3E1340" },
+            { label: "TRUTH", color: "#FF00FE", text: "white" },
+            { label: "DARE", color: "#EE018F", text: "white" },
+            { label: "SPIN AGAIN", color: "#BFFFFC", text: "#3E1340" }
+        ];
+
+        const wheel = document.getElementById('wheel');
+        const sectionsGroup = document.getElementById('sectionsGroup');
+        const resultBox = document.getElementById('result-box');
+        const resultText = document.getElementById('result-text');
+        
+        const numOptions = options.length;
+        const arc = 360 / numOptions;
+        let currentRotation = 0;
+        let isSpinning = false;
+
+        options.forEach((opt, i) => {
+            const angle = i * arc;
+            const x1 = 250 + 250 * Math.cos(Math.PI * (angle - 90) / 180);
+            const y1 = 250 + 250 * Math.sin(Math.PI * (angle - 90) / 180);
+            const x2 = 250 + 250 * Math.cos(Math.PI * (angle + arc - 90) / 180);
+            const y2 = 250 + 250 * Math.sin(Math.PI * (angle + arc - 90) / 180);
+
+            const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
+            const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+            path.setAttribute("d", `M 250 250 L ${x1} ${y1} A 250 250 0 0 1 ${x2} ${y2} Z`);
+            path.setAttribute("fill", opt.color);
+            path.setAttribute("stroke", "rgba(255,255,255,0.1)");
+            
+            const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
+            text.setAttribute("x", "250");
+            text.setAttribute("y", "75");
+            text.setAttribute("fill", opt.text);
+            text.setAttribute("font-size", "22");
+            text.setAttribute("font-weight", "bold");
+            text.setAttribute("text-anchor", "middle");
+            text.setAttribute("transform", `rotate(${angle + arc / 2}, 250, 250)`);
+            text.textContent = opt.label;
+
+            g.appendChild(path);
+            g.appendChild(text);
+            sectionsGroup.appendChild(g);
+        });
+
+        function handleSpin(event) {
+            if (isSpinning) return;
+
+            const rect = wheel.getBoundingClientRect();
+            const centerX = rect.left + rect.width / 2;
+            const centerY = rect.top + rect.height / 2;
+
+            // Detección corregida para inclinación
+            const dx = event.clientX - centerX;
+            const dy = (event.clientY - centerY) / Math.cos(30 * Math.PI / 180);
+            
+            let clickAngle = Math.atan2(dy, dx) * (180 / Math.PI) + 90;
+            if (clickAngle < 0) clickAngle += 360;
+
+            const visualRotation = currentRotation % 360;
+            const adjustedClickAngle = (clickAngle - visualRotation + 360) % 360;
+            const targetIndex = Math.floor(adjustedClickAngle / arc);
+            
+            spinTo(targetIndex);
+        }
+
+        function spinTo(index) {
+            isSpinning = true;
+            resultBox.classList.remove('show');
+
+            const spins = 5 * 360; 
+            const sliceCenter = (index * arc) + (arc / 2);
+            
+            const currentMod = currentRotation % 360;
+            const distanceToNextZero = 360 - currentMod;
+            
+            // Alineación perfecta al puntero (arriba = 0 grados)
+            const additionalRotation = distanceToNextZero + spins + (360 - sliceCenter);
+            
+            currentRotation += additionalRotation;
+            wheel.style.transform = `rotate(${currentRotation}deg)`;
+
+            setTimeout(() => {
+                isSpinning = false;
+                resultText.textContent = options[index].label;
+                resultBox.classList.add('show');
+                if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
+            }, 5000);
+        }
+    </script>
+</body>
+</html>
